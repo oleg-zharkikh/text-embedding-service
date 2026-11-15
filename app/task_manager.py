@@ -1,4 +1,5 @@
 import logging
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
@@ -9,6 +10,14 @@ from typing import Optional
 import numpy as np
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
+
+from app.metrics import (
+    task_manager_tasks,
+    task_manager_tasks_active,
+    task_manager_task_duration,
+    task_manager_texts_per_task,
+    task_manager_cleanup
+)
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +36,8 @@ class Task:
         'error',
         'result',
         'status',
-        'task_id'
+        'task_id',
+        'texts_count'
     ]
 
     def __init__(self, task_id: str):
@@ -37,6 +47,7 @@ class Task:
         self.error: str | None = None
         self.created_at = datetime.utcnow()
         self.completed_at: datetime | None = None
+        self.texts_count: int = 0
 
 
 class TaskManager:
@@ -57,6 +68,7 @@ class TaskManager:
             ]
             for task_id in old_task_ids:
                 del self._tasks[task_id]
+                task_manager_cleanup.add(1)
                 logger.debug(f'Cleaned up old task: {task_id}')
 
     def submit_task(
@@ -70,9 +82,14 @@ class TaskManager:
 
         task_id = str(uuid.uuid4())
         task = Task(task_id)
+        task.texts_count = len(texts)
 
         with self._lock:
             self._tasks[task_id] = task
+
+        task_manager_texts_per_task.record(len(texts))
+        task_manager_tasks_active.add(1)
+        task_manager_tasks.add(1, {'status': 'submitted'})
 
         self._executor.submit(
             self._process_task,
@@ -94,6 +111,7 @@ class TaskManager:
         batch_size: int,
         normalize_embeddings: bool
     ):
+        start_time = time.time()
         try:
             embeddings = model.encode(
                 texts,
@@ -110,12 +128,23 @@ class TaskManager:
             task.status = TaskStatus.COMPLETED
             task.completed_at = datetime.utcnow()
 
+            duration = time.time() - start_time
+            task_manager_task_duration.record(duration, {'status': 'completed'})
+            task_manager_tasks_active.add(-1)
+            task_manager_tasks.add(1, {'status': 'completed'})
+
             logger.info(f'Task completed: {task.task_id}')
 
         except Exception as e:
             task.error = str(e)
             task.status = TaskStatus.FAILED
             task.completed_at = datetime.utcnow()
+
+            duration = time.time() - start_time
+            task_manager_task_duration.record(duration, {'status': 'failed'})
+            task_manager_tasks_active.add(-1)
+            task_manager_tasks.add(1, {'status': 'failed'})
+
             logger.error(f'Task failed: {task.task_id}, error: {e}', exc_info=True)
 
     def get_task_status(self, task_id: str) -> TaskStatus:

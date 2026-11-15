@@ -1,0 +1,15 @@
+fastapi
+uvicorn
+sentence-transformers
+scikit-learn
+numpy
+pydantic
+pydantic-settings
+torch
+opentelemetry-api
+opentelemetry-sdk
+opentelemetry-exporter-prometheus
+opentelemetry-instrumentation-fastapi
+opentelemetry-instrumentation-threading
+prometheus-client
+psutil
