@@ -26,8 +26,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-model = SentenceTransformer(MODEL_PATH, local_files_only=True)
-# model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
+# model = SentenceTransformer(MODEL_PATH, local_files_only=True)
+model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
 
 logger.info('Sentence transformer model loaded successfully.')
 
