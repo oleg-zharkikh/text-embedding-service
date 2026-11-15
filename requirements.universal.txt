@@ -4,3 +4,5 @@ sentence-transformers
 scikit-learn
 numpy
 pydantic
+pydantic-settings
+torch
